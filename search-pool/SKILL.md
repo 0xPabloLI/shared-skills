@@ -118,6 +118,20 @@ node ~/.agents/skills/web-access/scripts/vertical-search.mjs --doctor
 
 缺任何一档都只是少一档能力，`--doctor` 会说出来，不会把调用方炸停。
 
+### 改动门禁：`--doctor` 不算改过的证据
+
+`--doctor` 答的是「这台机器能用哪几档」，不答「这次改动有没有弄坏契约」。搜索层的单测与脚本放在一起，
+按零依赖的分发形态由**宿主仓的 runner** 执行（skill 包本身不带 node_modules）：
+
+```bash
+npx vitest run skills/shared/web-access/scripts/__tests__/
+```
+
+覆盖缓存命中/过期/损坏与不可写、适配器发现与降级、扇出的跨族去重与畸形记录、CLI 经软链被调用。
+值得跑的理由是实测过的：本层缺陷（软链入口判断让 `main()` 静默不执行、`--doctor` 被参数检查拦下、
+对数组做 `.split(",")`、`--lang` 被拼进 URL host）**都只在真跑 CLI 时暴露**，读代码看不出来。
+宿主把 `skills/**/*.test.mjs` 纳进 include 后，`npm test` 会连带跑它们。
+
 ## 参考
 
 - Pool 设计与引擎链实现：`scripts/short-video/lib/search-pool.mjs`（#65/#226）
