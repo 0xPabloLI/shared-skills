@@ -77,6 +77,24 @@ to verify CDP availability. If CDP is ready, the browser is
 available — you don't need CDP for every query, web-access will route
 to it only when needed.
 
+### Breadth Fan-out
+
+More engines is not more sources. Measured on one machine (2026-09-30): Serper×Jina
+overlap 100%, Google×Serper 73/33/54%, the same Brave index reached through two
+paths 82/43/82%. Fanning out across mirrors buys ranking variance, and citing two
+mirrors as two sources manufactures false independence. Spend breadth budget where
+content is actually orthogonal:
+
+1. `node ~/.agents/skills/web-access/scripts/vertical-search.mjs --doctor` — one call
+   tells you which tiers this machine can reach (keyless verticals, web adapters,
+   local metasearch). Run it before, not after, you decide how wide to go.
+2. Keyless vertical primaries — `vertical-search.mjs "<query>"` (openalex, arxiv, hn,
+   stackoverflow, wikipedia, github). These carry `publishedAt`/authors, so they feed
+   Tier 1 and Phase 4 directly, and they cover what general web engines index poorly.
+3. One general web engine per index family, not all of them — and Tavily is the near
+   disjoint one in that set (11-43% against the others), so it earns its quota on
+   breadth, not just quality.
+
 ### Parallel Retrieval
 
 Multiple independent queries can run **in parallel** — don't serialize
@@ -127,7 +145,10 @@ saved or summarized. Source URLs and quality tiers recorded.
 Cross-reference claims across sources. For each key claim:
 
 - How many independent sources confirm it?
-- Are they truly independent (not all citing the same origin)?
+- Are they truly independent (not all citing the same origin)? Different engine
+  names are not independence: results surfaced through two paths of one index, or
+  through an index that mirrors Google, count as one source. Judge by publisher
+  domain.
 - Any contradictions? Record both sides.
 - **Authoritative reports (official PDF / white paper / regulatory filing)**:
   download and parse the primary document — web versions and secondhand summaries
