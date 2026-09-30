@@ -1,12 +1,12 @@
 ---
 name: search-pool
 description: |
-  Search Pool CLI（多引擎 fallback REST 搜索：Serper > Brave > Tavily > Jina）、curl SearXNG（本地聚合、无额度广度扫描）与免 key 垂直一手源（arXiv/OpenAlex/HN/StackOverflow/Wikipedia/GitHub，广度正交）的使用说明。
-  触发场景：agent 需要搜索主流新闻/论文/深度技术信息（Search Pool CLI），或做无额度顾虑的多引擎聚合扫描（SearXNG），或需要学术/代码/社区/百科一手源与新设备搜索能力自检（vertical-search CLI / --doctor）。
+  Search Pool CLI（多引擎 fallback REST 搜索：Serper > Brave > Tavily > Jina，跨索引族扇出 `--fanout`）、curl SearXNG（本地聚合、无额度广度扫描）与免 key 垂直一手源（arXiv/OpenAlex/HN/StackOverflow/Wikipedia/GitHub，广度正交）的使用说明。
+  触发场景：agent 需要搜索主流新闻/论文/深度技术信息（Search Pool CLI），或做无额度顾虑的多引擎聚合扫描（SearXNG），或需要多个互相独立的索引族（fanout），或需要学术/代码/社区/百科一手源与新设备搜索能力自检（vertical-search CLI / --doctor）。
   登录态/反爬站点（微信公众号、知乎、微博、小红书等需要浏览器的内容）不在本 skill 范围——直接用 web-access skill，不经本 skill 中转。
 metadata:
   author: inside-china-ai
-  version: "1.2.0"
+  version: "1.3.0"
   issue: "#265"
 ---
 
@@ -60,6 +60,16 @@ node scripts/short-video/lib/search-pool.mjs "中国 AI 芯片出口管制" --ma
 API key 从仓库根 `.env.local` 读取（`SERPER_API_KEY` / `BRAVE_SEARCH_API_KEY` / `TAVILY_API_KEY` / `JINA_API_KEY`），无需注入环境变量。
 
 适用：中文或英文的主流新闻检索、论文发现、技术事实核实。额度敏感——单次查询即可命中时优先 `--max-results` 截取，避免为凑数反复搜索。
+
+**跨索引族扇出（`cached-search.mjs --fanout`）**：默认档是「第一个非空引擎胜出」，省钱够快，但一次查询只看得到一份 top-N。需要独立信源时改用扇出——每族一个引擎，合并后按归一化 URL 去重，每条结果带 `family` 标记：
+
+```bash
+node ~/.agents/skills/web-access/scripts/cached-search.mjs "<query>" --fanout --max-results 5
+```
+
+族的划分来自重合率实测（Serper×Jina 结果 100% 相同；同一 Google 索引经两条路径 73/33/54% 重合）：`google`(=serper) / `brave` / `tavily` 各一，Jina 不入族。输出 `{engine:"fanout", families:{…}, articles:[…]}`——`families` 记各族原始条数（去重前），`articles` 是去重后的；实测 15 条原始 → 10 条唯一（重合 33%）。缺 key 的族只进 `attempts`，不掩盖其余族的结果；缓存键独立（`<adapter>:fanout`），扇出结果不会被后续单档查询当成「serper 的答案」复用。
+
+代价是一次扇出 = 3 次配额，所以按需启用而非默认：广度确实影响结论时才扇（Deep 档调研、Phase 4 交叉验证信源独立性）。
 
 **引擎可用性记录（#281，2026-09-14 复测，逐引擎）**：**Serper 可用**（HTTP 200 + organic 命中；修复 `parseArticles` 对 `link`/`snippet` 的映射后链头直击）。**Brave 可用**（Node fetch HTTP 200 + 20 条，fake-ip DNS 下不再 fetch failed）；历史故障特征（2026-08 观察，供复发时对照）：TUN fake-ip 把 `api.search.brave.com` 解析到 198.18.x 且 Node fetch 报 fetch failed——绕行方法：代理规则让该域名走代理（非 DIRECT），或 DoH 解析真实 IP 后 `curl --resolve` 钉住。**Tavily 可用**（#265 smoke 命中、#287 smoke 沿用，本票未重复单测）。**Jina 可用**（pool CLI 命中 HTTP 200 + 9 条，5.7s 偏慢；首轮误判"未配置"系探针 grep 前缀笔误——key 实际一直在 `.env.local`）。
 

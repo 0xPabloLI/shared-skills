@@ -93,7 +93,10 @@ content is actually orthogonal:
    Tier 1 and Phase 4 directly, and they cover what general web engines index poorly.
 3. One general web engine per index family, not all of them — and Tavily is the near
    disjoint one in that set (11-43% against the others), so it earns its quota on
-   breadth, not just quality.
+   breadth, not just quality. `cached-search.mjs "<query>" --fanout` is that shape
+   already implemented (google/brave/tavily, cross-family URL dedupe, each article
+   tagged `family`); reach for it instead of three hand-rolled calls when the
+   general-web layer is where you need independence.
 
 ### Parallel Retrieval
 
