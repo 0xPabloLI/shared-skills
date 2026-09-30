@@ -31,7 +31,7 @@ metadata:
 node scripts/short-video/lib/search-pool.mjs "<query>" [--engine <serper|brave|tavily|jina>] [--max-results <n>]
 ```
 
-**调用路径**：在本 repo（inside-china-ai）内直接用上面的相对路径。**从其他 repo 调用时**，先在本机 shell env 设一次 `export INSIDE_CHINA_AI_REPO=/path/to/inside-china-ai`（CLI 与 key 都在这个 checkout 里，单一来源），命令改用 `node "$INSIDE_CHINA_AI_REPO/scripts/short-video/lib/search-pool.mjs" ...`；变量未设时命令会得到空路径报错——先设变量再调。
+**调用路径**：在本 repo（inside-china-ai）内直接用上面的相对路径。**从别处调用时把 CLI 位置注入 `SEARCH_POOL_CLI`**（通用注入点，`cached-search.mjs` 优先读它）：`export SEARCH_POOL_CLI=/path/to/inside-china-ai/scripts/short-video/lib/search-pool.mjs`。`INSIDE_CHINA_AI_REPO` 是历史注入点，仅为兼容本机既有 shell 配置而保留。**两者都是可选的**：都没有时 `cached-search.mjs` 返回 `{engine: null, attempts:[…no_adapter…]}` 并以 0 退出，由 agent 按 web-access 工具表决定下一档，不会把调用方炸停。CLI 与 key 都在那个 checkout 里，由 CLI 自己 `loadEnv()` 读其仓库根 `.env.local`。
 
 **首次使用自检**：key 从该 checkout 的仓库根 `.env.local` 读取（`.env.example` 底部有占位模板）。key 缺失不是错误——返回 `engine: null` + 空数组，`attempts` 里逐条写明 `missing <X>_API_KEY`，照着补 key 即可。
 
