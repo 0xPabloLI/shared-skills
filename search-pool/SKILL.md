@@ -99,7 +99,7 @@ node ~/.agents/skills/web-access/scripts/vertical-search.mjs "<query>" [--source
 
 **它不是降级阶梯的一档**（#284 单向阶梯）：与 Route A/B 并列，由调用方按问题类型选，彼此不互相 fallback。
 
-实测边界（写在这里是为了别把它当保证）：`arxiv` 单源 ~12s，别当快档；`github` 免 key 限 10 req/min，扇出别连打；`semanticscholar` 与 SEC EDGAR **未实现**——前者免 key 时 429 限流，后者 `browse-edgar` 的 `output=json` 已废（返回 HTML）。中文登录态平台（微博/知乎/微信/小红书）不在此路，交 web-access 的 CDP 行。
+实测边界（写在这里是为了别把它当保证）：`arxiv` 单源 ~12s，别当快档；`github` 免 key 限 10 req/min，扇出别连打；`openalex` 不带身份参数会 **HTTP 429**（限流，隔一分钟再探就回来——`--doctor` 里它缺席时别急着重判死；注意 doctor 一次并发打六源，刚查过同一源再跑更容易撞），要稳定需加 `mailto=<你的邮箱>` 进 polite pool；`wikipedia` 在**没有代理的 shell 里直接不可达**（`UND_ERR_CONNECT_TIMEOUT`，且同一条 URL 用 curl 也一样超时 ⇒ 是出网路由，不是代码问题）。`semanticscholar` 与 SEC EDGAR **未实现**——前者免 key 时 429 限流，后者 `browse-edgar` 的 `output=json` 已废（返回 HTML）。中文登录态平台（微博/知乎/微信/小红书）不在此路，交 web-access 的 CDP 行。
 
 ## 新设备自检（缺什么只报键名，绝不回显值）
 

@@ -286,10 +286,16 @@ function main(argv) {
   if (argv.includes("--doctor")) {
     return doctor().then((d) => {
       const usable = d.vertical.filter((v) => v.ok).map((v) => v.source);
-      process.stdout.write(
-        JSON.stringify({ ...d, usable }, null, 2) +
-          "\n\n免 key 可用: " +
-          usable.join(", ") +
+      const down = d.vertical.filter((v) => !v.ok);
+      // stdout 只放 JSON，人类摘要走 stderr —— 与 pool CLI 同一条契约。否则
+      // `--doctor | jq` 会在 JSON 之后撞上摘要而解析失败。
+      process.stdout.write(JSON.stringify({ ...d, usable }, null, 2) + "\n");
+      process.stderr.write(
+        "免 key 可用: " +
+          (usable.join(", ") || "无") +
+          // 缺席要带原因：只报「少了谁」会把「限流」「要代理」「选择器坏」混成一句话
+          "\n免 key 不可用: " +
+          (down.map((v) => `${v.source}(${v.note || "?"})`).join(", ") || "无") +
           "\n付费 web 适配器: " +
           (d.webAdapters.some((a) => a.present) ? "已注入" : "未注入（设 SEARCH_POOL_CLI）") +
           "\n本地 SearXNG: " +
