@@ -16,7 +16,8 @@
  * 缓存是额度优化，不是正确性依赖：文件损坏/不可写一律当 miss。
  *
  * 用法: node cached-search.mjs "query" [--max-results N] [--fanout]
- * --fanout = 按索引族并行扇出（每族一个引擎 + 合并去重），用于需要独立信源的调研；
+ * --fanout = 按索引族扇出（每族一个引擎 + 合并去重；当前逐族**串行**调用，
+ *            延迟按 3 次引擎往返叠加计，不是并发），用于需要独立信源的调研；
  *            默认仍是单档 fallback（省额度，够快）。
  * 环境变量:
  *   SEARCH_POOL_CLI / INSIDE_CHINA_AI_REPO  适配器位置
