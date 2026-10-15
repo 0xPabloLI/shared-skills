@@ -14,7 +14,7 @@ updated: 2026-09-30
 ## 有效模式
 
 - 判断仓库访问范围：读 `input[name=install_target]` 的 **`.checked` 属性**（DOM property，非 attribute），`value="all"` / `value="selected"` 二选一为真。用 label 文字判断必然误判。
-- 读取已选仓库清单：`document.body.innerText` 中，从 `"Select at least one repository."` 之后到 `"Save"` 之前的一段即为 chip 列表（形如 `0xPabloLI/aaveapy`）。仓库选择器不是 `input[type=checkbox][name=repository_ids[]]`（查不到元素）。
+- 读取已选仓库清单：`document.body.innerText` 中，从 `"Select at least one repository."` 之后到 `"Save"` 之前的一段即为 chip 列表（形如 `<owner>/<repo>`）。仓库选择器不是 `input[type=checkbox][name=repository_ids[]]`（查不到元素）。
 - App 权限是否齐：该页 `Permissions` 段落直接列全文（`Read and write access to checks, code, commit statuses, issues, pull requests…`），无待批权限时不会出现额外横幅。
 - 一次性验证 sudo 是否已过：`/navigate` 同 URL 后读 `document.title`，出现 `Installed GitHub App - <App>` 即已可用。
 
