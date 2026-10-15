@@ -5,7 +5,7 @@ description: |
   触发场景：agent 需要搜索主流新闻/论文/深度技术信息（Search Pool CLI），或做无额度顾虑的多引擎聚合扫描（SearXNG），或需要多个互相独立的索引族（fanout），或需要学术/代码/社区/百科一手源与新设备搜索能力自检（vertical-search CLI / --doctor）。
   登录态/反爬站点（微信公众号、知乎、微博、小红书等需要浏览器的内容）不在本 skill 范围——直接用 web-access skill，不经本 skill 中转。
 metadata:
-  author: inside-china-ai
+  author: 0xPabloLI
   version: "1.3.0"
   issue: "#265"
 ---
@@ -31,7 +31,7 @@ metadata:
 node scripts/short-video/lib/search-pool.mjs "<query>" [--engine <serper|brave|tavily|jina>] [--max-results <n>]
 ```
 
-**调用路径**：在本 repo（inside-china-ai）内直接用上面的相对路径。**从别处调用时把 CLI 位置注入 `SEARCH_POOL_CLI`**（通用注入点，`cached-search.mjs` 优先读它）：`export SEARCH_POOL_CLI=/path/to/inside-china-ai/scripts/short-video/lib/search-pool.mjs`。`INSIDE_CHINA_AI_REPO` 是历史注入点，仅为兼容本机既有 shell 配置而保留。**两者都是可选的**：都没有时 `cached-search.mjs` 返回 `{engine: null, attempts:[…no_adapter…]}` 并以 0 退出，由 agent 按 web-access 工具表决定下一档，不会把调用方炸停。CLI 与 key 都在那个 checkout 里，由 CLI 自己 `loadEnv()` 读其仓库根 `.env.local`。
+**调用路径**：在本 skill 的**底本仓**（承载 Search Pool CLI 与 key 的那个 checkout）内直接用上面的相对路径。**从别处调用时把 CLI 位置注入 `SEARCH_POOL_CLI`**（通用注入点，`cached-search.mjs` 优先读它）：`export SEARCH_POOL_CLI=/path/to/<底本仓>/scripts/short-video/lib/search-pool.mjs`。`INSIDE_CHINA_AI_REPO` 是历史注入点，仅为兼容本机既有 shell 配置而保留。**两者都是可选的**：都没有时 `cached-search.mjs` 返回 `{engine: null, attempts:[…no_adapter…]}` 并以 0 退出，由 agent 按 web-access 工具表决定下一档，不会把调用方炸停。CLI 与 key 都在那个 checkout 里，由 CLI 自己 `loadEnv()` 读其仓库根 `.env.local`。
 
 **首次使用自检**：key 从该 checkout 的仓库根 `.env.local` 读取（`.env.example` 底部有占位模板）。key 缺失不是错误——返回 `engine: null` + 空数组，`attempts` 里逐条写明 `missing <X>_API_KEY`，照着补 key 即可。
 
