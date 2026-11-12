@@ -388,7 +388,9 @@ process.exit(1);
 
   it("失败诊断去掉子进程 stderr 里的凭据", async () => {
     const pool = fakePool(`
-process.stderr.write("SERPER_API_KEY=sk-live-secret-1234567890");
+process.stderr.write("SERPER_API_KEY=sk-live-secret-1234567890\\n");
+process.stderr.write("Authorization: Bearer sk-live-bearer-secret\\n");
+process.stderr.write('"api_key": "sk-live-json-secret"');
 process.exit(1);
 `);
     const store = `/tmp/cached-search-fanout-redact-${process.pid}.json`;
@@ -403,7 +405,11 @@ process.exit(1);
       expect(out.attempts).toHaveLength(3);
       for (const attempt of out.attempts) {
         expect(attempt.error).toContain("SERPER_API_KEY=[redacted]");
+        expect(attempt.error).toContain("Authorization: [redacted]");
+        expect(attempt.error).toContain('"api_key": [redacted]');
         expect(attempt.error).not.toContain("sk-live-secret");
+        expect(attempt.error).not.toContain("sk-live-bearer-secret");
+        expect(attempt.error).not.toContain("sk-live-json-secret");
       }
     } finally {
       unlinkSync(pool);

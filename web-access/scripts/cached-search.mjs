@@ -178,13 +178,24 @@ export function dedupeFamilies(groups) {
 
 /** 一次适配器诊断：只留一行，去掉可能的凭据，再进 attempts。 */
 function describeAdapterError(error, timeoutMs = ADAPTER_TIMEOUT_MS) {
-  if (error?.killed || error?.signal) {
+  // Only the execFile timeout sets `killed`; a bare `signal` is an external
+  // kill (OOM, abort), which must not be reported as a 60s timeout.
+  if (error?.killed) {
     return `killed after ${timeoutMs}ms (${error.signal || "no signal"})`;
+  }
+  if (error?.signal) {
+    return `signal ${error.signal}`;
   }
   const raw = String(error?.stderr || error?.message || error || "");
   const scrubbed = raw
-    .replace(/((?:api[_-]?key|apikey|token|secret|authorization)\s*[:=]\s*)\S+/gi, "$1[redacted]")
-    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+    // Scheme first: `Authorization: Bearer <token>` would otherwise let the
+    // key=value rule consume the word "Bearer" and leave the token behind.
+    .replace(/\b(?:Bearer|Basic|Digest|Token)\s+[^\s,;]+/gi, "[redacted]")
+    // Quotes are optional on both sides (`"api_key": "sk-…"` is common).
+    .replace(
+      /(["']?(?:api[_-]?key|apikey|token|secret|authorization)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|\S+)/gi,
+      "$1[redacted]",
+    )
     .replace(/\s+/g, " ")
     .trim();
   const label =
@@ -213,6 +224,8 @@ export async function search({
   env = process.env,
   store = process.env.CACHED_SEARCH_STORE || DEFAULT_STORE,
   now = Date.now(),
+  // Test seam: production always uses ADAPTER_TIMEOUT_MS; unit tests shorten it
+  // so the timeout branch does not wait 60s.
   adapterTimeoutMs = ADAPTER_TIMEOUT_MS,
 }) {
   const adapters = discoverAdapters(env);
