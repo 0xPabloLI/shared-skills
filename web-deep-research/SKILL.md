@@ -16,6 +16,14 @@ persistence) + **web-access fetching** (delegates tool selection to web-access
 skill) + **code verification** from local source inspection (grep, read_file,
 codebase_search against installed packages and repo code).
 
+## Paths
+
+Script commands in this skill run from the consuming repo's root against that
+repo's own copy of web-access: `node skills/web-access/scripts/<script>.mjs`. This
+repo vendors it as the `skills/shared` submodule (`skills/web-access` symlinks into
+it), so the path resolves after `git submodule update --init`. Outside such a repo,
+fall back to `node ~/.agents/skills/web-access/scripts/<script>.mjs`.
+
 ## Dependencies
 
 - **Methodology**: The 8-phase structure (SCOPE → PLAN → RETRIEVE → TRIANGULATE →
@@ -23,7 +31,7 @@ codebase_search against installed packages and repo code).
 - **Fetching**: Delegates to `web-access` skill for all web content retrieval
   (search, page fetch, browser). web-access handles: tool selection (scenario
   routing), login state, JS rendering, anti-bot mitigation. Run
-  `node ~/.agents/skills/web-access/scripts/check-deps.mjs` before Phase 3 to
+  `node skills/web-access/scripts/check-deps.mjs` before Phase 3 to
   verify CDP availability.
 - **Code verification**: When the research topic involves a library, framework, tool,
   or any claim that can be verified against source code, inspect the local installed
@@ -64,7 +72,36 @@ After research, append proven-useful angles back to angles.md (see its
 
 Map each angle to 2-4 search queries.
 
-**Completion criterion**: A list of angles, each with 2-4 search queries.
+### Candidate Discovery (selection research)
+
+When the question is "which model / tool / vendor should we use", the queries decide
+the shortlist, so a family no query names never appears: a 2026-09 T2I survey missed
+all three Qwen-Image models — two published 9 and 13 months earlier — because every
+query was phrased around FLUX/ERNIE/Krea. Build the pool from three sources and check
+coverage against their union:
+
+1. **Ranked leaderboards** — the domain's own popularity ranking rather than general
+   web search: `github.com/trending?since=monthly`, `huggingface.co/models?sort=likes`
+   (or `sort=trending`), and the equivalent launch ranking for products. Take the top
+   30 as the entry pool.
+2. **Vendor org pages** — one page per known vendor in the space:
+   `github.com/<org>?tab=repositories`, `huggingface.co/<org>`. First-party releases
+   land here, including ones too new to rank.
+3. **The angle queries** above.
+
+Top 30 is a discovery entry, not a quality cut: the pool is the union, and a
+low-ranked new release still belongs to it. Per candidate record upstream original vs
+quantized copies, source, date checked and the exclusion reason, so coverage stays
+auditable — a family with zero candidates is a finding, not an absence.
+
+**Admission criteria** — write them at the top of the report, then test each
+candidate: code or weights actually published, commits within the last 6 months,
+license stated. Where the consuming repo already ships an admission checklist, cite
+it instead of restating it — this repo: `docs/agents/proposal-review.md` §4.
+
+**Completion criterion**: A list of angles, each with 2-4 search queries; for
+selection topics, a candidate pool from the three sources above plus the admission
+criteria written down.
 
 ## Phase 3 — RETRIEVE
 
@@ -72,7 +109,7 @@ Load `web-access` skill and follow its tool selection table for all
 search and page fetching — routing is single-sourced in web-access's
 table, including its search-pool fallback row.
 
-**Before starting Phase 3**: Run `node ~/.agents/skills/web-access/scripts/check-deps.mjs`
+**Before starting Phase 3**: Run `node skills/web-access/scripts/check-deps.mjs`
 to verify CDP availability. If CDP is ready, the browser is
 available — you don't need CDP for every query, web-access will route
 to it only when needed.
@@ -85,7 +122,7 @@ paths 82/43/82%. Fanning out across mirrors buys ranking variance, and citing tw
 mirrors as two sources manufactures false independence. Spend breadth budget where
 content is actually orthogonal:
 
-1. `node ~/.agents/skills/web-access/scripts/vertical-search.mjs --doctor` — one call
+1. `node skills/web-access/scripts/vertical-search.mjs --doctor` — one call
    tells you which tiers this machine can reach (keyless verticals, web adapters,
    local metasearch). Run it before, not after, you decide how wide to go.
 2. Keyless vertical primaries — `vertical-search.mjs "<query>"` (openalex, arxiv, hn,
