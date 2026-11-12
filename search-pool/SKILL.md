@@ -67,7 +67,7 @@ API key 从仓库根 `.env.local` 读取（`SERPER_API_KEY` / `BRAVE_SEARCH_API_
 node ~/.agents/skills/web-access/scripts/cached-search.mjs "<query>" --fanout --max-results 5
 ```
 
-族的划分来自重合率实测（Serper×Jina 结果 100% 相同；同一 Google 索引经两条路径 73/33/54% 重合）：`google`(=serper) / `brave` / `tavily` 各一，Jina 不入族。输出 `{engine:"fanout", families:{…}, articles:[…]}`——`families` 记各族原始条数（去重前），`articles` 是去重后的；实测 15 条原始 → 10 条唯一（重合 33%）。缺 key 的族只进 `attempts`，不掩盖其余族的结果；缓存键独立（`<adapter>:fanout`），扇出结果不会被后续单档查询当成「serper 的答案」复用。
+族的划分来自重合率实测（Serper×Jina 结果 100% 相同；同一 Google 索引经两条路径 73/33/54% 重合）：`google`(=serper) / `brave` / `tavily` 各一，Jina 不入族。三族**并发**启动（每族一个子进程，单族 60s 硬超时），墙钟约等于最慢一族而不是三次往返之和；单族失败/超时只进 `attempts`，不影响其余族。输出 `{engine:"fanout", families:{…}, articles:[…]}`——`families` 记各族原始条数（去重前），`articles` 是去重后的，合并顺序固定按族表、与完成先后无关；实测 15 条原始 → 10 条唯一（重合 33%）。缓存键独立（`<adapter>:fanout`），扇出结果不会被后续单档查询当成「serper 的答案」复用。
 
 代价是一次扇出 = 3 次配额，所以按需启用而非默认：广度确实影响结论时才扇（Deep 档调研、Phase 4 交叉验证信源独立性）。
 

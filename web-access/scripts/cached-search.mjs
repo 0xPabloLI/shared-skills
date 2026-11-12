@@ -16,14 +16,14 @@
  * 缓存是额度优化，不是正确性依赖：文件损坏/不可写一律当 miss。
  *
  * 用法: node cached-search.mjs "query" [--max-results N] [--fanout]
- * --fanout = 按索引族扇出（每族一个引擎 + 合并去重；当前逐族**串行**调用，
- *            延迟按 3 次引擎往返叠加计，不是并发），用于需要独立信源的调研；
+ * --fanout = 按索引族扇出（每族一个引擎 + 合并去重；三族**并发**调用，
+ *            延迟按最慢一族计而不是三次往返叠加），用于需要独立信源的调研；
  *            默认仍是单档 fallback（省额度，够快）。
  * 环境变量:
  *   SEARCH_POOL_CLI / INSIDE_CHINA_AI_REPO  适配器位置
  *   CACHED_SEARCH_STORE                     缓存文件（默认 /tmp/web-access-search-cache.json）
  */
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -35,11 +35,20 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 export const CACHE_VERSION = 1;
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_STORE = "/tmp/web-access-search-cache.json";
 const POOL_RELATIVE_PATH = "scripts/short-video/lib/search-pool.mjs";
+
+/**
+ * 子进程硬上限：单族挂起不能拖住整次扇出。pool CLI 自己的 HTTP timeout 是 15s，
+ * 这里留足代理/慢引擎的余量；超时按族失败记入 attempts，其余族照常合并。
+ */
+const ADAPTER_TIMEOUT_MS = 60_000;
+const ADAPTER_MAX_BUFFER = 10 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
 
 /** 按优先级发现适配器，只返回真实存在于本机的那些。 */
 export function discoverAdapters(env = process.env) {
@@ -167,24 +176,44 @@ export function dedupeFamilies(groups) {
   return { articles, byFamily };
 }
 
-function runAdapter(adapter, query, maxResults, engine) {
-  const argv = [adapter.path, query, "--max-results", String(maxResults)];
-  if (engine) argv.push("--engine", engine);
-  const out = execFileSync("node", argv, {
-    encoding: "utf8",
-    env: process.env,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  return JSON.parse(out);
+/** 一次适配器诊断：只留一行，去掉可能的凭据，再进 attempts。 */
+function describeAdapterError(error, timeoutMs = ADAPTER_TIMEOUT_MS) {
+  if (error?.killed || error?.signal) {
+    return `killed after ${timeoutMs}ms (${error.signal || "no signal"})`;
+  }
+  const raw = String(error?.stderr || error?.message || error || "");
+  const scrubbed = raw
+    .replace(/((?:api[_-]?key|apikey|token|secret|authorization)\s*[:=]\s*)\S+/gi, "$1[redacted]")
+    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\s+/g, " ")
+    .trim();
+  const label =
+    typeof error?.code === "number" ? `exit ${error.code}` : String(error?.code || "error");
+  return `${label}${scrubbed ? `: ${scrubbed}` : ""}`.slice(0, 160);
 }
 
-export function search({
+async function runAdapter(adapter, query, maxResults, engine, timeoutMs = ADAPTER_TIMEOUT_MS) {
+  const argv = [adapter.path, query, "--max-results", String(maxResults)];
+  if (engine) argv.push("--engine", engine);
+  const { stdout } = await execFileAsync("node", argv, {
+    encoding: "utf8",
+    env: process.env,
+    maxBuffer: ADAPTER_MAX_BUFFER,
+    timeout: timeoutMs,
+    // 子进程是本次查询专属的无状态 CLI：超时后不能留下仍在跑的子进程。
+    killSignal: "SIGKILL",
+  });
+  return JSON.parse(stdout);
+}
+
+export async function search({
   query,
   maxResults = 8,
   fanout = false,
   env = process.env,
   store = process.env.CACHED_SEARCH_STORE || DEFAULT_STORE,
   now = Date.now(),
+  adapterTimeoutMs = ADAPTER_TIMEOUT_MS,
 }) {
   const adapters = discoverAdapters(env);
   const cache = loadCache(store);
@@ -194,30 +223,39 @@ export function search({
     const warm = cacheGet(cache, { adapter: key, keyword: query, now });
     if (warm)
       return { articles: warm, engine: "cache", adapter: key, attempts: [], cacheHit: true };
-    const groups = [];
-    const attempts = [];
-    for (const f of FAMILIES) {
-      try {
-        const r = runAdapter(adapters[0], query, maxResults, f.engine);
-        const list = Array.isArray(r.articles) ? r.articles : [];
-        groups.push({ family: f.family, articles: list });
-        if (!list.length)
-          attempts.push({
-            family: f.family,
-            engine: f.engine,
-            ok: false,
-            error: `empty (engine=${JSON.stringify(r.engine)})`,
-          });
-      } catch (error) {
-        groups.push({ family: f.family, articles: [] });
-        attempts.push({
-          family: f.family,
-          engine: f.engine,
-          ok: false,
-          error: String(error.message).slice(0, 140),
-        });
-      }
-    }
+    // 每族一个并发子进程；Promise.all 按 FAMILIES 顺序返回，所以合并顺序
+    // 与完成先后无关。单族抛错只影响它自己的 group/attempt。
+    const perFamily = await Promise.all(
+      FAMILIES.map(async (f) => {
+        try {
+          const r = await runAdapter(adapters[0], query, maxResults, f.engine, adapterTimeoutMs);
+          const list = Array.isArray(r.articles) ? r.articles : [];
+          return {
+            group: { family: f.family, articles: list },
+            attempt: list.length
+              ? null
+              : {
+                  family: f.family,
+                  engine: f.engine,
+                  ok: false,
+                  error: `empty (engine=${JSON.stringify(r.engine)})`,
+                },
+          };
+        } catch (error) {
+          return {
+            group: { family: f.family, articles: [] },
+            attempt: {
+              family: f.family,
+              engine: f.engine,
+              ok: false,
+              error: describeAdapterError(error, adapterTimeoutMs),
+            },
+          };
+        }
+      }),
+    );
+    const groups = perFamily.map((r) => r.group);
+    const attempts = perFamily.map((r) => r.attempt).filter(Boolean);
     const merged = dedupeFamilies(groups);
     if (merged.articles.length) {
       cacheSet(cache, { adapter: key, keyword: query, results: merged.articles });
@@ -248,7 +286,7 @@ export function search({
   const attempts = [];
   for (const adapter of adapters) {
     try {
-      const result = runAdapter(adapter, query, maxResults);
+      const result = await runAdapter(adapter, query, maxResults, undefined, adapterTimeoutMs);
       const articles = Array.isArray(result.articles) ? result.articles : [];
       if (articles.length > 0) {
         cacheSet(cache, { adapter: adapter.declaredBy, keyword: query, results: articles });
@@ -270,7 +308,7 @@ export function search({
       attempts.push({
         adapter: adapter.declaredBy,
         ok: false,
-        error: String(error.message).slice(0, 160),
+        error: describeAdapterError(error, adapterTimeoutMs),
       });
     }
   }
@@ -286,7 +324,7 @@ export function search({
   return { articles: [], engine: null, adapter: null, attempts, cacheHit: false };
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const query = args[0];
   if (!query || query.startsWith("--")) {
@@ -295,7 +333,7 @@ function main() {
   }
   const maxIdx = args.indexOf("--max-results");
   const maxResults = maxIdx >= 0 ? Number(args[maxIdx + 1]) || 8 : 8;
-  const result = search({ query, maxResults, fanout: args.includes("--fanout") });
+  const result = await search({ query, maxResults, fanout: args.includes("--fanout") });
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   // 空结果不是错误：attempts 里写明原因，由调用方决定下一步（与 pool CLI 一致）。
   process.exit(0);
@@ -315,4 +353,9 @@ const invokedAsScript = (() => {
   }
 })();
 
-if (invokedAsScript) main();
+if (invokedAsScript) {
+  main().catch((error) => {
+    console.error(`cached-search: ${error?.message || error}`);
+    process.exit(1);
+  });
+}
