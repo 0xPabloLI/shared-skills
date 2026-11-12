@@ -251,7 +251,9 @@ process.stdout.write(JSON.stringify({ articles: [{ url: "https://only-" + eng + 
     const log = `/tmp/cached-search-events-${process.pid}-${Date.now()}.log`;
     // 每个子进程先写 START，等到三族都写过后才继续（barrier），再按族 sleep
     // 不同的时长 —— 完成顺序因此是 brave → tavily → serper，与 FAMILIES 相反。
-    // 串行实现会在第一个子进程等 barrier 时超时，断言「第一个 END 前有 3 个 START」失败。
+    // 串行实现只有第一个子进程写 START；它等满 3s barrier 后写 END，断言
+    // 「第一个 END 前有 3 个 START」因此失败（2026-11-12 用旧实现实测：
+    // [ 'START serper' ] 对 3）。
     const pool = fakePool(`
 import { appendFileSync, readFileSync } from "node:fs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
