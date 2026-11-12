@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SOURCES, DEFAULT_SOURCES, merge, fanout } from "../vertical-search.mjs";
+import { SOURCES, DEFAULT_SOURCES, merge, fanout, searchOne } from "../vertical-search.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, "..", "vertical-search.mjs");
@@ -123,17 +123,21 @@ describe("parsers against recorded payloads", () => {
     expect(a.snippet).toBe("a mixture model");
   });
 
-  it("every parser yields title + http url + date", () => {
+  it("every parser yields title + http url (+ date where the source has one)", () => {
     const all = [
       ...SOURCES.openalex.parse(FIX.openalex, "openalex"),
       ...SOURCES.arxiv.parseXml(FIX.arxivXml, "arxiv"),
       ...SOURCES.hn.parse(FIX.hn, "hn"),
       ...SOURCES.stackoverflow.parse(FIX.stackoverflow, "stackoverflow"),
-      ...SOURCES.github.parse(FIX.github, "github"),
     ];
     expect(all.length).toBeGreaterThan(5);
     for (const a of all)
       expect(shape(a)).toEqual({ hasTitle: true, hasUrl: true, hasDate: true, src: a.source });
+    // github 没有发布日期：updated_at 是推送/星标时间，冒充 publishedAt 会污染
+    // 下游的新鲜度排序（#468）。
+    for (const a of SOURCES.github.parse(FIX.github, "github")) {
+      expect(shape(a)).toEqual({ hasTitle: true, hasUrl: true, hasDate: false, src: "github" });
+    }
   });
 });
 
@@ -222,5 +226,208 @@ describe("CLI", () => {
     const r = await fanout({ query: "x", sources: ["nope-not-a-source"], maxResults: 1 });
     expect(r.articles).toEqual([]);
     expect(r.attempts).toEqual([]);
+  });
+});
+
+// #468：多条目 fixture。旧的每源单条 fixture 恰好遮住了「多条塌成 1 条」。
+const WIKI_FIVE = {
+  query: {
+    search: [542, 543, 544, 545, 546].map((pageid, i) => ({
+      title: `MoE ${i}`,
+      pageid,
+      snippet: `entry ${i}`,
+      timestamp: "2026-05-16T15:54:46Z",
+    })),
+  },
+};
+
+const HN_FIVE = {
+  hits: [
+    {
+      title: "story 1",
+      url: "https://a.test/1",
+      objectID: "1",
+      created_at: "2025-01-01T00:00:00Z",
+    },
+    { title: "ask 1", objectID: "2", created_at: "2025-01-02T00:00:00Z" },
+    { title: "ask 2", objectID: "3", created_at: "2025-01-03T00:00:00Z" },
+    {
+      title: "story 2",
+      url: "https://a.test/2",
+      objectID: "4",
+      created_at: "2025-01-04T00:00:00Z",
+    },
+    { title: "ask 3", objectID: "5", created_at: "2025-01-05T00:00:00Z" },
+  ],
+};
+
+describe("multi-entry results survive the dedupe (#468)", () => {
+  it("wikipedia keeps all 5 (curid lives in the query string)", () => {
+    const parsed = SOURCES.wikipedia.parse(WIKI_FIVE, "wikipedia", {});
+    expect(parsed).toHaveLength(5);
+    expect(merge(["wikipedia"], [{ articles: parsed }], "q").articles).toHaveLength(5);
+  });
+
+  it("hn item?id fallback urls stay distinct", () => {
+    const parsed = SOURCES.hn.parse(HN_FIVE, "hn");
+    expect(parsed).toHaveLength(5);
+    expect(merge(["hn"], [{ articles: parsed }], "q").articles).toHaveLength(5);
+  });
+
+  it("still collapses the same page across sources", () => {
+    const a = { title: "x", url: "https://example.com/doc?id=7", source: "hn" };
+    const b = { title: "x", url: "https://www.example.com/doc/?id=7", source: "github" };
+    expect(
+      merge(["hn", "github"], [{ articles: [a] }, { articles: [b] }], "q").articles,
+    ).toHaveLength(1);
+  });
+
+  it("ignores tracking params and their order", () => {
+    const first = {
+      title: "x",
+      url: "https://example.com/p?utm_source=a&utm_medium=b&id=9",
+      source: "hn",
+    };
+    const second = {
+      title: "x",
+      url: "https://example.com/p?id=9&utm_campaign=c&fbclid=zzz",
+      source: "github",
+    };
+    expect(
+      merge(["hn", "github"], [{ articles: [first] }, { articles: [second] }], "q").articles,
+    ).toHaveLength(1);
+  });
+});
+
+describe("identity and provider contracts (#468)", () => {
+  it("openalex attaches mailto only when SEARCH_CONTACT_EMAIL is set", () => {
+    const prev = process.env.SEARCH_CONTACT_EMAIL;
+    try {
+      delete process.env.SEARCH_CONTACT_EMAIL;
+      expect(SOURCES.openalex.build("q", 3)).not.toContain("mailto=");
+      process.env.SEARCH_CONTACT_EMAIL = "ops@example.com";
+      expect(SOURCES.openalex.build("q", 3)).toContain("mailto=ops%40example.com");
+    } finally {
+      if (prev === undefined) delete process.env.SEARCH_CONTACT_EMAIL;
+      else process.env.SEARCH_CONTACT_EMAIL = prev;
+    }
+  });
+
+  it("arxiv asks over https", () => {
+    expect(SOURCES.arxiv.build("q", 3)).toMatch(/^https:\/\//);
+  });
+
+  it("github does not fake publishedAt out of updated_at", () => {
+    const [a] = SOURCES.github.parse(FIX.github, "github");
+    expect(a.publishedAt).toBeNull();
+    expect(a.snippet).toContain("2026-09-02");
+  });
+});
+
+describe("failure classification (#468)", () => {
+  const run = async (fetchImpl, fn) => {
+    vi.stubGlobal("fetch", fetchImpl);
+    try {
+      return await fn();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+  const failing = (status, headers = {}) => ({
+    ok: false,
+    status,
+    headers: new Headers(headers),
+  });
+
+  it("retries a 429 once after Retry-After, then reports rate-limit", async () => {
+    let calls = 0;
+    const waits = [];
+    const r = await run(
+      async () => (calls++, failing(429, { "retry-after": "2" })),
+      () =>
+        searchOne("openalex", "q", 1, {
+          sleep: async (ms) => {
+            waits.push(ms);
+          },
+        }),
+    );
+    expect(calls).toBe(2);
+    expect(waits).toEqual([2000]);
+    expect(r.kind).toBe("rate-limit");
+    expect(r.error).toContain("429");
+  });
+
+  it("caps a long Retry-After instead of sleeping the whole window", async () => {
+    const waits = [];
+    await run(
+      async () => failing(429, { "retry-after": "3600" }),
+      () => searchOne("openalex", "q", 1, { sleep: async (ms) => waits.push(ms) }),
+    );
+    expect(waits).toEqual([10000]);
+  });
+
+  it("does not retry a 400/422 parameter error", async () => {
+    let calls = 0;
+    const r = await run(
+      async () => (calls++, failing(422)),
+      () => searchOne("github", "q", 1, { sleep: async () => {} }),
+    );
+    expect(calls).toBe(1);
+    expect(r.kind).toBe("request");
+  });
+
+  it("classifies a connect failure as reachability, not a dead source", async () => {
+    const err = new TypeError("fetch failed");
+    err.cause = { code: "UND_ERR_CONNECT_TIMEOUT" };
+    const r = await run(
+      async () => {
+        throw err;
+      },
+      () => searchOne("wikipedia", "q", 1, { sleep: async () => {} }),
+    );
+    expect(r.kind).toBe("connect");
+    expect(r.error).toBe("fetch failed");
+    expect(r.hint).toMatch(/代理|出网|网络/);
+  });
+
+  it("a reachable but empty result is not a failure", async () => {
+    const r = await run(
+      async () => ({ ok: true, json: async () => ({ items: [] }) }),
+      () => searchOne("github", "q", 1, { sleep: async () => {} }),
+    );
+    expect(r.error).toBeUndefined();
+    expect(r.articles).toEqual([]);
+  });
+
+  it("surfaces failed sources as warnings, not just attempts", () => {
+    const out = merge(
+      ["hn", "github"],
+      [
+        { articles: [{ title: "t", url: "https://a.test/1", source: "hn" }] },
+        { articles: [], error: "HTTP 403", kind: "auth", hint: "设 GITHUB_TOKEN" },
+      ],
+      "q",
+    );
+    expect(out.attempts[0]).toMatchObject({ source: "github", ok: false, kind: "auth" });
+    expect(out.warnings).toHaveLength(1);
+    expect(out.warnings[0]).toContain("github");
+    expect(out.warnings[0]).toContain("GITHUB_TOKEN");
+  });
+
+  it("fanout warns that github runs anonymous without a token", async () => {
+    const prev = process.env.GITHUB_TOKEN;
+    const prevGh = process.env.GH_TOKEN;
+    try {
+      delete process.env.GITHUB_TOKEN;
+      delete process.env.GH_TOKEN;
+      const r = await run(
+        async () => ({ ok: true, json: async () => ({ items: [] }) }),
+        () => fanout({ query: "q", sources: ["github"], maxResults: 1, sleep: async () => {} }),
+      );
+      expect(r.warnings.join("\n")).toContain("GITHUB_TOKEN");
+    } finally {
+      if (prev !== undefined) process.env.GITHUB_TOKEN = prev;
+      if (prevGh !== undefined) process.env.GH_TOKEN = prevGh;
+    }
   });
 });
