@@ -116,24 +116,38 @@ to it only when needed.
 
 ### Breadth Fan-out
 
-More engines is not more sources. Measured on one machine (2026-09-30): Serper×Jina
-overlap 100%, Google×Serper 73/33/54%, the same Brave index reached through two
-paths 82/43/82%. Fanning out across mirrors buys ranking variance, and citing two
-mirrors as two sources manufactures false independence. Spend breadth budget where
-content is actually orthogonal:
+More engines is not more sources. Measured on 60 queries x 12 channels
+(#1276, 2026-11-14, `docs/research/search-orthogonality-full-2026-11.md`):
+the pool trio stays pairwise independent (URL containment median 30/30/44%,
+far below the 73% that once justified merging mirrors, though it swings
+0-100% per query), Jina is near-orthogonal but excluded on cost (91k tokens
+per call, 9-20s; use it for one targeted hard-to-reach page, never in a
+fan-out), and the self-hosted SearXNG layer is near-disjoint from the trio
+(URL median 0-10%, +27-51 new domains per intent band) while being a mirror
+internally (80-100% across its engines) — one SearXNG call is the whole
+layer. Spend breadth budget where content is actually orthogonal:
 
 1. `node skills/web-access/scripts/vertical-search.mjs --doctor` — one call
    tells you which tiers this machine can reach (keyless verticals, web adapters,
    local metasearch). Run it before, not after, you decide how wide to go.
-2. Keyless vertical primaries — `vertical-search.mjs "<query>"` (openalex, arxiv, hn,
-   stackoverflow, wikipedia, github). These carry `publishedAt`/authors, so they feed
-   Tier 1 and Phase 4 directly, and they cover what general web engines index poorly.
-3. One general web engine per index family, not all of them — and Tavily is the near
-   disjoint one in that set (11-43% against the others), so it earns its quota on
-   breadth, not just quality. `cached-search.mjs "<query>" --fanout` is that shape
-   already implemented (google/brave/tavily, cross-family URL dedupe, each article
-   tagged `family`); reach for it instead of three hand-rolled calls when the
-   general-web layer is where you need independence.
+2. Keyless vertical primaries — `vertical-search.mjs "<query>"` (openalex, arxiv,
+   hn, stackoverflow, wikipedia, github). These carry `publishedAt`/authors, so
+   they feed Tier 1 and Phase 4 directly, and they cover what general web engines
+   index poorly. Pick by intent: hn is the community band's primary (+34 domains
+   per band, short entity queries only — full sentences get ~1 Algolia hit);
+   openalex+arxiv carry the academic band; for Chinese queries pass `--lang zh`.
+3. One general web engine per index family via
+   `cached-search.mjs "<query>" --fanout` (google/brave/tavily, cross-family URL
+   dedupe, each article tagged `family`) — reach for it instead of three
+   hand-rolled calls. Paid-channel priority varies by intent (measured): news
+   favors serper (+52 domains/band), docs favors brave, community favors
+   brave/tavily over serper (+5 for entity queries).
+4. One SearXNG aggregate call (self-hosted, zero quota, near-disjoint from the
+   trio) when the band still looks thin — it adds 27-51 domains per intent band;
+   do not call several SearXNG engines, they mirror each other. Single-engine
+   queries need an engine SearXNG can actually reach: check
+   `unresponsive_engines` in the JSON output before trusting a zero —
+   proxy-port drift and per-IP blocks make whole engines look dead.
 
 ### Parallel Retrieval
 

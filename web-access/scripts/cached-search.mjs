@@ -137,9 +137,16 @@ export function saveCache(store, cache) {
 }
 
 /**
- * 索引族：实测互为镜像的引擎只算一档 —— Jina×Serper 结果重合 100%、Google×Serper
- * 73/33/54%，全打等于把同一份 top-10 取四遍。Tavily 是唯一近正交的（与其他 11-43%）。
- * 所以扇出的正确形状是「每族一个」，不是把 fallback 链全跑一遍；Jina 不入族。
+ * 索引族：实测互为镜像的引擎只算一档。#1276 铺满测量（2026-11-14，60 查询 ×
+ * 12 信道，docs/research/search-orthogonality-full-2026-11.md）：
+ * 三族两两 URL 包含度中位 30/30/44%（逐查询摆动 0–100%），均低于当初促成
+ * 「合并镜像」的 73% —— 三族保留，扇出的正确形状仍是「每族一个」。
+ * Jina 不入族，理由是成本/时延不是镜像：对三族 URL 重合 14–43%（旧注释的
+ * 「与 Serper 100% 重合」未被复现），但单次 ≈91k token（约 9% 月额度）且
+ * p50 9–20s —— 只做定向单条深读，不进扇出。
+ * SearXNG 是零额度广度层（对三族 URL 中位 0–10%、每层 +27–51 个新域），
+ * 但层内引擎互为镜像（中位 80–100%），打一档即可；它不是 pool 引擎，
+ * 扇出组合按 web-deep-research SKILL.md Phase 3 的按意图推荐表走。
  */
 export const FAMILIES = [
   { family: "google", engine: "serper" },
