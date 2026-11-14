@@ -147,10 +147,23 @@ export const FAMILIES = [
   { family: "tavily", engine: "tavily" },
 ];
 
+// 与 bench 的 canonicalUrl 同口径（search-orthogonality/metrics.mjs）：非追踪
+// query 保留在键里 —— youtube ?v=A 与 ?v=B、HN ?id=1 与 ?id=2 是不同内容，
+// 旧键 host+pathname 会在扇出合并时把它们静默并掉（#1276 / 试点 §5.6）。
+const TRACKING_PARAM_RE = /^(?:utm_.+|fbclid|gclid|mc_cid|mc_eid|igshid|ref|ref_src|source|spm)$/i;
+
 function normArticleUrl(u) {
   try {
     const x = new URL(u);
-    return (x.hostname.replace(/^(www|m)\./, "") + x.pathname.replace(/\/+$/, "")).toLowerCase();
+    const params = [...x.searchParams.entries()]
+      .filter(([key]) => !TRACKING_PARAM_RE.test(key))
+      .sort(([a], [b]) => a.localeCompare(b));
+    const query = params.length
+      ? `?${params.map(([key, value]) => `${key}=${value}`).join("&")}`
+      : "";
+    return (
+      x.hostname.replace(/^(www|m)\./, "") + x.pathname.replace(/\/+$/, "") + query
+    ).toLowerCase();
   } catch {
     return String(u || "").toLowerCase();
   }

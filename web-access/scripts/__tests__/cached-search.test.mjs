@@ -201,6 +201,41 @@ describe("索引族扇出", () => {
     expect(byFamily).toEqual({ google: 2, brave: 1, tavily: 4 });
   });
 
+  it("dedupeFamilies 保留非追踪 query：同一页面的不同内容 ID 不被并成一条（#1276）", () => {
+    // 试点 §5.6：旧键 host+pathname 把 youtube ?v=A 与 ?v=B、HN ?id=1 与 ?id=2
+    // 判成重复——生产扇出合并会在 IDs 上丢真实结果。
+    const { articles, byFamily } = dedupeFamilies([
+      {
+        family: "google",
+        articles: [
+          { url: "https://www.youtube.com/watch?v=AAA" },
+          { url: "https://news.ycombinator.com/item?id=1" },
+        ],
+      },
+      {
+        family: "brave",
+        articles: [
+          { url: "https://m.youtube.com/watch?v=BBB" },
+          { url: "https://news.ycombinator.com/item?id=2" },
+        ],
+      },
+      {
+        family: "tavily",
+        articles: [
+          // 追踪参数必须被剥掉：与 ?v=AAA 是同一条
+          { url: "https://www.youtube.com/watch?v=AAA&utm_source=x" },
+        ],
+      },
+    ]);
+    expect(articles.map((a) => a.url)).toEqual([
+      "https://www.youtube.com/watch?v=AAA",
+      "https://news.ycombinator.com/item?id=1",
+      "https://m.youtube.com/watch?v=BBB",
+      "https://news.ycombinator.com/item?id=2",
+    ]);
+    expect(byFamily).toEqual({ google: 2, brave: 2, tavily: 1 });
+  });
+
   it("--fanout 合并三族并写入独立缓存键", async () => {
     const pool = fakePool(ECHO_POOL);
     const store = `/tmp/cached-search-fanout-${process.pid}.json`;
