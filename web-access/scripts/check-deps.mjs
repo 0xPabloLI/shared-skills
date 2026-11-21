@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { selectBrowser, knownBrowsers, findFallbackPort } from "./browser-discovery.mjs";
+import { resolveSitePatternsDir } from "./site-patterns-dir.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PROXY_SCRIPT = path.join(ROOT, "scripts", "cdp-proxy.mjs");
@@ -261,15 +262,18 @@ async function main() {
   const proxyOk = await ensureProxy(browserId, opts.browser);
   if (!proxyOk) process.exit(1);
 
-  // 列出已有站点经验
-  const patternsDir = path.join(ROOT, "references", "site-patterns");
+  // 列出已有站点经验（本机缓存；旧仓内目录只作只读回退）
+  const patterns = resolveSitePatternsDir();
   try {
     const sites = fs
-      .readdirSync(patternsDir)
+      .readdirSync(patterns.dir)
       .filter((f) => f.endsWith(".md"))
       .map((f) => f.replace(/\.md$/, ""));
     if (sites.length) {
-      console.log(`\nsite-patterns: ${sites.join(", ")}`);
+      console.log(`\nsite-patterns (${patterns.dir}): ${sites.join(", ")}`);
+    }
+    if (patterns.legacy) {
+      console.log(`  ⚠ 仍在旧仓库目录，运行 scripts/migrate-site-patterns.mjs 迁到 ${patterns.default}`);
     }
   } catch {}
 }

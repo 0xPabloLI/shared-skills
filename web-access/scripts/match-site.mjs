@@ -5,11 +5,18 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolveSitePatternsDir } from "./site-patterns-dir.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PATTERNS_DIR = path.join(ROOT, "references", "site-patterns");
+const { dir: PATTERNS_DIR, legacy, default: DEFAULT_DIR } = resolveSitePatternsDir();
 const query = (process.argv[2] || "").trim();
+
+if (legacy) {
+  // 旧仓内目录只是只读回退（#469）——提示一次迁移，读到的内容照常输出
+  process.stderr.write(
+    `提示：站点经验仍在旧仓库目录 ${PATTERNS_DIR}，新位置是 ${DEFAULT_DIR}。` +
+      `运行 node scripts/migrate-site-patterns.mjs 迁移。\n`,
+  );
+}
 
 if (!query || !fs.existsSync(PATTERNS_DIR)) {
   process.exit(0);

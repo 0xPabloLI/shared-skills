@@ -1,0 +1,2 @@
+# 站点经验是本机运行时缓存（#469），写入走 ~/.cache/web-access/site-patterns/
+web-access/references/site-patterns/

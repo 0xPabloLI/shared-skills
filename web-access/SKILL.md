@@ -181,7 +181,7 @@ curl -s "http://localhost:3456/close?target=ID"
 
 很多网站的链接包含会话相关的参数（如 token），这些参数是正常访问所必需的。提取 URL 时应保留完整地址，不要裁剪或省略参数。URL 通过 POST body 原样传入 `/new` 或 `/navigate`。
 
-> **v2.5.3 迁移提示**：若引用的站点经验文件（`references/site-patterns/*.md`）或其它脚本中仍含 `GET /new?url=...` 或 `/navigate?target=...&url=...` 的旧写法，调用会收到迁移指引。按 [`references/migration-2.5.3.md`](references/migration-2.5.3.md) 就地改写为 POST body 后再使用，并顺手把该站点经验文件更新掉。
+> **v2.5.3 迁移提示**：若引用的站点经验文件（本机缓存 `~/.cache/web-access/site-patterns/*.md`）或其它脚本中仍含 `GET /new?url=...` 或 `/navigate?target=...&url=...` 的旧写法，调用会收到迁移指引。按 [`references/migration-2.5.3.md`](references/migration-2.5.3.md) 就地改写为 POST body 后再使用，并顺手把该站点经验文件更新掉。
 
 ### 媒体资源提取
 
@@ -269,9 +269,9 @@ Proxy 持续运行，不建议主动停止——重启后需要在浏览器中�
 
 ## 站点经验
 
-操作中积累的特定网站经验，按域名存储在 `~/.agents/skills/web-access/references/site-patterns/` 下。
+操作中积累的特定网站经验，按域名存在**本机缓存** `~/.cache/web-access/site-patterns/` 下（`WEB_ACCESS_SITE_PATTERNS_DIR` 可覆盖）。它是运行时积累，不入库、不随 clone 分发。
 
-确定目标网站后，如果前置检查输出的 site-patterns 列表中有匹配的站点，必须读取对应文件获取先验知识（平台特征、有效模式、已知陷阱）。也可使用站点匹配脚本：
+确定目标网站后，如果本机存有匹配的站点经验，先读取对应文件获取先验知识（平台特征、有效模式、已知陷阱）；本机没有就直接按通用模式操作，不要让「经验必须存在」变成一次空等。也可用站点匹配脚本查：
 
 ```bash
 node ~/.agents/skills/web-access/scripts/match-site.mjs "用户输入文本"
@@ -279,7 +279,7 @@ node ~/.agents/skills/web-access/scripts/match-site.mjs "用户输入文本"
 
 经验内容标注了发现日期，当作可能有效的提示而非保证——如果按经验操作失败，回退通用模式并更新经验文件。
 
-CDP 操作成功完成后，如果发现了有必要记录经验的新站点或新模式（URL 结构、平台特征、操作策略），主动写入对应的站点经验文件。只写经过验证的事实，不写未确认的猜测。
+CDP 操作成功完成后，如果发现了有必要记录经验的新站点或新模式（URL 结构、平台特征、操作策略），主动写入本机缓存里的 `~/.cache/web-access/site-patterns/<domain>.md`（缓存为空时脚本会回退旧仓内目录并提示迁移：`node scripts/migrate-site-patterns.mjs`）。只写经过验证的事实，不写未确认的猜测。
 
 文件格式：
 
@@ -310,4 +310,4 @@ updated: 2026-03-19
 | 文件                                                               | 何时加载                                       |
 | ------------------------------------------------------------------ | ---------------------------------------------- |
 | `~/.agents/skills/web-access/references/cdp-api.md`                | 需要 CDP API 详细参考、JS 提取模式、错误处理时 |
-| `~/.agents/skills/web-access/references/site-patterns/{domain}.md` | 确定目标网站后，读取对应站点经验               |
+| `~/.cache/web-access/site-patterns/{domain}.md`                     | 确定目标网站后，本机有就读取对应站点经验       |
