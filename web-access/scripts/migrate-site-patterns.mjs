@@ -2,10 +2,10 @@
 // 把旧仓内目录的站点经验迁到本机缓存（#469）
 //
 // 用法：
-//   node scripts/migrate-site-patterns.mjs                 旧仓内目录 → ~/.cache/web-access/site-patterns
-//   node scripts/migrate-site-patterns.mjs --from <dir>    指定来源（例如另一台 checkout）
-//   node scripts/migrate-site-patterns.mjs --to <dir>      指定目标
-//   node scripts/migrate-site-patterns.mjs --dry-run       只报计划
+//   node web-access/scripts/migrate-site-patterns.mjs                 旧仓内目录 → ~/.cache/web-access/site-patterns
+//   node web-access/scripts/migrate-site-patterns.mjs --from <dir>    指定来源（例如另一台 checkout）
+//   node web-access/scripts/migrate-site-patterns.mjs --to <dir>      指定目标
+//   node web-access/scripts/migrate-site-patterns.mjs --dry-run       只报计划
 //
 // 语义：逐文件复制；目标已有同名文件时不覆盖，只报告冲突（两份内容谁对谁错要人来判）。
 // 来源目录不删除——迁完由人确认后再清理。

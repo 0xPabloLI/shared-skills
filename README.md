@@ -38,4 +38,4 @@ skills/web-deep-research → skills/shared/web-deep-research
 
 ## 站点模式住哪儿
 
-本机缓存 `~/.cache/web-access/site-patterns/<domain>.md`（`WEB_ACCESS_SITE_PATTERNS_DIR` 可覆盖），一个域名一条文件，frontmatter 的 `updated:` 就是这批 DOM 判据的**实测日期**。它是运行时积累、不入库：站点改版导致选择器或判据失效时改缓存文件，不改 `SKILL.md`；升级前的旧仓内 `web-access/references/site-patterns/` 用 `scripts/migrate-site-patterns.mjs` 迁过去。
+本机缓存 `~/.cache/web-access/site-patterns/<domain>.md`（`WEB_ACCESS_SITE_PATTERNS_DIR` 可覆盖），一个域名一条文件，frontmatter 的 `updated:` 就是这批 DOM 判据的**实测日期**。它是运行时积累、不入库：站点改版导致选择器或判据失效时改缓存文件，不改 `SKILL.md`；升级前的旧仓内 `web-access/references/site-patterns/` 用 `web-access/scripts/migrate-site-patterns.mjs` 迁过去。

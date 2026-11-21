@@ -273,7 +273,7 @@ async function main() {
       console.log(`\nsite-patterns (${patterns.dir}): ${sites.join(", ")}`);
     }
     if (patterns.legacy) {
-      console.log(`  ⚠ 仍在旧仓库目录，运行 scripts/migrate-site-patterns.mjs 迁到 ${patterns.default}`);
+      console.log(`  ⚠ 仍在旧仓库目录，运行 web-access/scripts/migrate-site-patterns.mjs 迁到 ${patterns.default}`);
     }
   } catch {}
 }

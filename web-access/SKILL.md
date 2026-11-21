@@ -279,7 +279,7 @@ node ~/.agents/skills/web-access/scripts/match-site.mjs "用户输入文本"
 
 经验内容标注了发现日期，当作可能有效的提示而非保证——如果按经验操作失败，回退通用模式并更新经验文件。
 
-CDP 操作成功完成后，如果发现了有必要记录经验的新站点或新模式（URL 结构、平台特征、操作策略），主动写入本机缓存里的 `~/.cache/web-access/site-patterns/<domain>.md`（缓存为空时脚本会回退旧仓内目录并提示迁移：`node scripts/migrate-site-patterns.mjs`）。只写经过验证的事实，不写未确认的猜测。
+CDP 操作成功完成后，如果发现了有必要记录经验的新站点或新模式（URL 结构、平台特征、操作策略），主动写入本机缓存里的 `~/.cache/web-access/site-patterns/<domain>.md`（缓存为空时脚本会回退旧仓内目录并提示迁移：`node web-access/scripts/migrate-site-patterns.mjs`）。只写经过验证的事实，不写未确认的猜测。
 
 文件格式：
 

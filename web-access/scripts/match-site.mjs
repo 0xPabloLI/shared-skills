@@ -14,7 +14,7 @@ if (legacy) {
   // 旧仓内目录只是只读回退（#469）——提示一次迁移，读到的内容照常输出
   process.stderr.write(
     `提示：站点经验仍在旧仓库目录 ${PATTERNS_DIR}，新位置是 ${DEFAULT_DIR}。` +
-      `运行 node scripts/migrate-site-patterns.mjs 迁移。\n`,
+      `运行 node web-access/scripts/migrate-site-patterns.mjs 迁移。\n`,
   );
 }
 

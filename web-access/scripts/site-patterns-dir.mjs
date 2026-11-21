@@ -4,7 +4,7 @@
 // 站点经验是本机运行时积累的缓存，不是入库资产：默认住 `~/.cache/web-access/site-patterns/`，
 // 可用 `WEB_ACCESS_SITE_PATTERNS_DIR` 覆盖。旧的仓内目录 `references/site-patterns/` 只在
 // 本机缓存还没有内容时作**只读回退**，让升级前的机器不丢经验；迁移用
-// `scripts/migrate-site-patterns.mjs`。
+// `web-access/scripts/migrate-site-patterns.mjs`。
 
 import fs from "node:fs";
 import os from "node:os";
